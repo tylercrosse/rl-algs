@@ -1,0 +1,14 @@
+# Example hyperparameters for PPO on CartPole-v1
+agent:
+  type: ppo
+  hidden_dims: [64, 64]
+  lr: 0.0003
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_epsilon: 0.2
+  rollout_length: 2048
+  minibatch_size: 64
+  num_epochs: 4
+trainer:
+  total_steps: 200000
+  eval_interval: 20000

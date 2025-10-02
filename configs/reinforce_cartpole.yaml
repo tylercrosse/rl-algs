@@ -1,0 +1,10 @@
+# Example hyperparameters for REINFORCE on CartPole-v1
+agent:
+  type: reinforce
+  hidden_dims: [128, 128]
+  lr: 0.0003
+  gamma: 0.99
+  entropy_coef: 0.01
+trainer:
+  total_steps: 80000
+  eval_interval: 10000
