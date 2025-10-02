@@ -1,0 +1,35 @@
+[project]
+name = "rl-algs"
+version = "0.1.0"
+description = "Reference implementations of classic reinforcement learning agents in PyTorch"
+readme = "README.md"
+authors = [{ name = "Tyler Crosse" }]
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.1.0",
+    "gymnasium>=0.29.1",
+    "numpy>=1.24",
+    "tqdm>=4.64",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "ruff>=0.1.9",
+    "black>=23.0",
+    "uv>=0.1.20",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["."]
+
+[tool.black]
+target-version = ["py310"]
+line-length = 100
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+select = ["E", "F", "I", "N", "UP", "ANN", "B", "BLE", "C4", "DTZ", "EXE", "ISC", "PIE", "Q", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "W"]
+ignore = ["ANN101", "ANN102", "ANN401"]
