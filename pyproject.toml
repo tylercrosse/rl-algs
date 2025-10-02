@@ -21,6 +21,10 @@ dev = [
     "matplotlib>=3.7",
 ]
 
+logging = [
+    "wandb>=0.16",
+]
+
 [tool.pytest.ini_options]
 addopts = "-q"
 pythonpath = ["."]

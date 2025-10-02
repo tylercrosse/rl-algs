@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Optional
+from typing import Callable, Dict, List, Mapping, Optional
 
 import numpy as np
 import torch
@@ -28,12 +28,18 @@ class TrainerConfig:
 class Trainer:
     """Generic trainer that minimizes boilerplate across agents."""
 
-    def __init__(self, agent: Agent, config: TrainerConfig) -> None:
+    def __init__(
+        self,
+        agent: Agent,
+        config: TrainerConfig,
+        loggers: Optional[List[Callable[[Mapping[str, float]], None]]] = None,
+    ) -> None:
         self.agent = agent
         self.config = config
         self.env = make_env(config.env_id, seed=config.seed, max_episode_steps=config.max_episode_steps)
         self.eval_env = make_env(config.env_id, seed=config.seed + 1, max_episode_steps=config.max_episode_steps)
         self.device = agent.device
+        self._loggers = list(loggers or [])
 
     def fit(self) -> List[Dict[str, float]]:
         obs, _ = self.env.reset(seed=self.config.seed)
@@ -78,7 +84,9 @@ class Trainer:
             if hasattr(self.agent, "sample_and_update"):
                 metrics = getattr(self.agent, "sample_and_update")()
             if metrics:
-                history.append({"step": float(step), **{k: float(v) for k, v in metrics.items()}})
+                payload = {"step": float(step), **{k: float(v) for k, v in metrics.items()}}
+                history.append(payload)
+                self._emit_metrics(payload)
 
             if done:
                 recorded_metrics: Mapping[str, float] | None = None
@@ -86,18 +94,18 @@ class Trainer:
                     episode_metrics = getattr(self.agent, "end_episode")()
                     if episode_metrics:
                         recorded_metrics = episode_metrics
-                        history.append(
-                            {"step": float(step), **{k: float(v) for k, v in episode_metrics.items()}}
-                        )
+                        payload = {"step": float(step), **{k: float(v) for k, v in episode_metrics.items()}}
+                        history.append(payload)
+                        self._emit_metrics(payload)
 
                 if not recorded_metrics or "return" not in recorded_metrics:
-                    history.append(
-                        {
-                            "step": float(step),
-                            "return": float(episode_return),
-                            "episode_len": float(episode_len),
-                        }
-                    )
+                    payload = {
+                        "step": float(step),
+                        "return": float(episode_return),
+                        "episode_len": float(episode_len),
+                    }
+                    history.append(payload)
+                    self._emit_metrics(payload)
 
                 obs, _ = self.env.reset()
                 obs = np.asarray(obs, dtype=np.float32)
@@ -108,10 +116,21 @@ class Trainer:
 
             if step % self.config.eval_interval == 0:
                 eval_score = evaluate_agent(self.agent, self.eval_env, episodes=self.config.eval_episodes)
-                history.append({"step": float(step), "eval_return": eval_score})
+                payload = {"step": float(step), "eval_return": eval_score}
+                history.append(payload)
+                self._emit_metrics(payload)
 
         # Final evaluation
         final_eval_score = evaluate_agent(self.agent, self.eval_env, episodes=self.config.eval_episodes)
-        history.append({"step": float(self.config.total_steps), "eval_return": final_eval_score})
+        payload = {"step": float(self.config.total_steps), "eval_return": final_eval_score}
+        history.append(payload)
+        self._emit_metrics(payload)
 
         return history
+
+    def _emit_metrics(self, metrics: Mapping[str, float]) -> None:
+        if not self._loggers:
+            return
+        payload = dict(metrics)
+        for logger in self._loggers:
+            logger(payload)

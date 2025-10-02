@@ -20,6 +20,9 @@ algorithmic differences, run small experiments, and demonstrate familiarity with
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
+
+# Optional: add W&B logging support
+pip install -e .[logging]
 ```
 
 Train an agent:
@@ -31,7 +34,8 @@ python scripts/run_experiment.py --algo dqn --env-id CartPole-v1 --total-steps 5
 Swap `--algo` between `dqn`, `ppo`, and `reinforce` to compare behaviors. The trainer logs training
 metrics and runs periodic evaluation episodes. Add `--plot` (optionally `--plot-path my_plot.png` and
 `--rolling-window 100`) to generate a timestep-vs-return plot with a rolling-average reward curve
-after training completes.
+after training completes. Pass `--wandb` to stream the same metrics to Weights & Biases (configure the
+project with `--wandb-project`, `--wandb-entity`, etc.).
 
 ## Repository Structure
 

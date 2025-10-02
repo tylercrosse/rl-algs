@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import argparse
-from typing import Dict, List
+import os
+import sys
+from dataclasses import asdict
+from typing import Dict, List, Mapping
 
 import numpy as np
 
-import sys
-import os
-
 # Add the parent directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from rl_algs.agents import DQNAgent, DQNConfig, PPOAgent, PPOConfig, ReinforceAgent, ReinforceConfig
 from rl_algs.training.trainer import Trainer, TrainerConfig
@@ -37,6 +37,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=50,
         help="Window size for rolling-average returns in the plot",
+    )
+    parser.add_argument("--wandb", action="store_true", help="Log metrics to Weights & Biases")
+    parser.add_argument("--wandb-project", default="rl-algs", help="W&B project name")
+    parser.add_argument("--wandb-entity", default=None, help="W&B entity or team name")
+    parser.add_argument("--wandb-name", default=None, help="Custom run name registered in W&B")
+    parser.add_argument(
+        "--wandb-tag",
+        action="append",
+        default=[],
+        help="Tag to attach to the W&B run (can be passed multiple times)",
     )
     return parser.parse_args()
 
@@ -74,37 +84,50 @@ def main() -> None:
         eval_interval=args.eval_interval,
         seed=args.seed,
     )
-    trainer = Trainer(agent, trainer_config)
-    history: List[Dict[str, float]] = trainer.fit()
+    loggers = []
+    wandb_run = None
+    if args.wandb:
+        try:
+            import wandb
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "Weights & Biases is required for --wandb; install it via `pip install .[logging]`"
+            ) from exc
 
-    final_eval = [entry["eval_return"] for entry in history if "eval_return" in entry]
-    if final_eval:
-        print(f"Final evaluation return: {final_eval[-1]:.2f}")
-
-    if args.plot or args.plot_path:
-        # Ensure results directory exists in the project root and prefer it for plots.
-        results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
-        os.makedirs(results_dir, exist_ok=True)
-
-        if args.plot_path:
-            plot_path = args.plot_path
-            # If the user provided only a filename (no directory) and it's not absolute,
-            # place it inside the results/ directory.
-            if not os.path.isabs(plot_path) and not os.path.dirname(plot_path):
-                plot_path = os.path.join(results_dir, plot_path)
-        else:
-            # sanitize env id and algo for filename
-            safe_env = args.env_id.replace("/", "-").replace("\\", "-")
-            safe_algo = args.algo.replace("/", "-").replace("\\", "-")
-            plot_filename = f"{safe_algo}_{safe_env}_{args.total_steps}.png"
-            plot_path = os.path.join(results_dir, plot_filename)
-
-        _plot_history(
-            history,
-            plot_path,
-            title=f"{args.algo.upper()} on {args.env_id}",
-            rolling_window=max(1, args.rolling_window),
+        wandb_config = _prepare_wandb_config(args, trainer_config, agent, obs_dim, action_dim)
+        wandb_run = wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=args.wandb_name,
+            tags=args.wandb_tag or None,
+            config=wandb_config,
         )
+
+        def _wandb_logger(metrics: Mapping[str, float]) -> None:
+            wandb_run.log(dict(metrics))
+
+        loggers.append(_wandb_logger)
+
+    trainer = Trainer(agent, trainer_config, loggers=loggers)
+    history: List[Dict[str, float]] = []
+    try:
+        history = trainer.fit()
+
+        final_eval = [entry["eval_return"] for entry in history if "eval_return" in entry]
+        if final_eval:
+            print(f"Final evaluation return: {final_eval[-1]:.2f}")
+            if wandb_run is not None:
+                wandb_run.summary["final_eval_return"] = final_eval[-1]
+
+        if args.plot or args.plot_path:
+            _generate_plot(
+                args,
+                history,
+                title=f"{args.algo.upper()} on {args.env_id}",
+            )
+    finally:
+        if wandb_run is not None:
+            wandb_run.finish()
 
 
 def _plot_history(history: List[Dict[str, float]], path: str, title: str, rolling_window: int) -> None:
@@ -147,6 +170,53 @@ def _plot_history(history: List[Dict[str, float]], path: str, title: str, rollin
     plt.tight_layout()
     plt.savefig(path)
     print(f"Saved plot to {path}")
+
+
+def _generate_plot(args: argparse.Namespace, history: List[Dict[str, float]], title: str) -> None:
+    # Ensure results directory exists in the project root and prefer it for plots.
+    results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
+    os.makedirs(results_dir, exist_ok=True)
+
+    if args.plot_path:
+        plot_path = args.plot_path
+        # If the user provided only a filename (no directory) and it's not absolute,
+        # place it inside the results/ directory.
+        if not os.path.isabs(plot_path) and not os.path.dirname(plot_path):
+            plot_path = os.path.join(results_dir, plot_path)
+    else:
+        # sanitize env id and algo for filename
+        safe_env = args.env_id.replace("/", "-").replace("\\", "-")
+        safe_algo = args.algo.replace("/", "-").replace("\\", "-")
+        plot_filename = f"{safe_algo}_{safe_env}_{args.total_steps}.png"
+        plot_path = os.path.join(results_dir, plot_filename)
+
+    _plot_history(
+        history,
+        plot_path,
+        title=title,
+        rolling_window=max(1, args.rolling_window),
+    )
+
+
+def _prepare_wandb_config(
+    args: argparse.Namespace,
+    trainer_config: TrainerConfig,
+    agent,
+    obs_dim: int,
+    action_dim: int,
+) -> Dict[str, object]:
+    agent_config = asdict(agent.config)
+    trainer_cfg = asdict(trainer_config)
+    return {
+        "algo": args.algo,
+        "env_id": args.env_id,
+        "obs_dim": obs_dim,
+        "action_dim": action_dim,
+        "total_steps": args.total_steps,
+        "seed": args.seed,
+        "agent": agent_config,
+        "trainer": trainer_cfg,
+    }
 
 
 if __name__ == "__main__":
