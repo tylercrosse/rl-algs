@@ -39,6 +39,8 @@ class Trainer:
         obs, _ = self.env.reset(seed=self.config.seed)
         obs = np.asarray(obs, dtype=np.float32)
         history: List[Dict[str, float]] = []
+        episode_return = 0.0
+        episode_len = 0
 
         for step in tqdm(range(1, self.config.total_steps + 1), desc="Training", unit="step"):
             obs_tensor = to_tensor(obs, self.device).unsqueeze(0)
@@ -69,6 +71,9 @@ class Trainer:
             if hasattr(self.agent, "record_reward"):
                 getattr(self.agent, "record_reward")(reward)
 
+            episode_return += reward
+            episode_len += 1
+
             metrics: Mapping[str, float] = {}
             if hasattr(self.agent, "sample_and_update"):
                 metrics = getattr(self.agent, "sample_and_update")()
@@ -76,12 +81,28 @@ class Trainer:
                 history.append({"step": float(step), **{k: float(v) for k, v in metrics.items()}})
 
             if done:
+                recorded_metrics: Mapping[str, float] | None = None
                 if hasattr(self.agent, "end_episode"):
                     episode_metrics = getattr(self.agent, "end_episode")()
                     if episode_metrics:
-                        history.append({"step": float(step), **{k: float(v) for k, v in episode_metrics.items()}})
+                        recorded_metrics = episode_metrics
+                        history.append(
+                            {"step": float(step), **{k: float(v) for k, v in episode_metrics.items()}}
+                        )
+
+                if not recorded_metrics or "return" not in recorded_metrics:
+                    history.append(
+                        {
+                            "step": float(step),
+                            "return": float(episode_return),
+                            "episode_len": float(episode_len),
+                        }
+                    )
+
                 obs, _ = self.env.reset()
                 obs = np.asarray(obs, dtype=np.float32)
+                episode_return = 0.0
+                episode_len = 0
             else:
                 obs = np.asarray(next_obs, dtype=np.float32)
 

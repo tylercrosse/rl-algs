@@ -24,7 +24,7 @@ class AgentConfig:
     """Base configuration shared across algorithms."""
 
     gamma: float = 0.99
-    device: str | torch.device = "cpu"
+    device: str | torch.device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
     seed: int = 0
 
 
@@ -34,6 +34,7 @@ class Agent(abc.ABC):
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
         self.device = torch.device(config.device)
+        print(f"Using device: {self.device}")
         torch.manual_seed(config.seed)
 
     @abc.abstractmethod

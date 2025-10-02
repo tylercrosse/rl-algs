@@ -26,6 +26,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cpu", help="Torch device to use")
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--eval-interval", type=int, default=10_000, help="Evaluation interval in environment steps")
+    parser.add_argument("--plot", action="store_true", help="Generate a timestep vs. return plot after training")
+    parser.add_argument(
+        "--plot-path",
+        default=None,
+        help="Where to write the plot when --plot is enabled (defaults to training_returns.png)",
+    )
+    parser.add_argument(
+        "--rolling-window",
+        type=int,
+        default=50,
+        help="Window size for rolling-average returns in the plot",
+    )
     return parser.parse_args()
 
 
@@ -68,6 +80,73 @@ def main() -> None:
     final_eval = [entry["eval_return"] for entry in history if "eval_return" in entry]
     if final_eval:
         print(f"Final evaluation return: {final_eval[-1]:.2f}")
+
+    if args.plot or args.plot_path:
+        # Ensure results directory exists in the project root and prefer it for plots.
+        results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
+        os.makedirs(results_dir, exist_ok=True)
+
+        if args.plot_path:
+            plot_path = args.plot_path
+            # If the user provided only a filename (no directory) and it's not absolute,
+            # place it inside the results/ directory.
+            if not os.path.isabs(plot_path) and not os.path.dirname(plot_path):
+                plot_path = os.path.join(results_dir, plot_path)
+        else:
+            # sanitize env id and algo for filename
+            safe_env = args.env_id.replace("/", "-").replace("\\", "-")
+            safe_algo = args.algo.replace("/", "-").replace("\\", "-")
+            plot_filename = f"{safe_algo}_{safe_env}_{args.total_steps}.png"
+            plot_path = os.path.join(results_dir, plot_filename)
+
+        _plot_history(
+            history,
+            plot_path,
+            title=f"{args.algo.upper()} on {args.env_id}",
+            rolling_window=max(1, args.rolling_window),
+        )
+
+
+def _plot_history(history: List[Dict[str, float]], path: str, title: str, rolling_window: int) -> None:
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError(
+            "matplotlib is required for plotting; install it via `pip install matplotlib`"
+        ) from exc
+
+    episode_points = [(entry["step"], entry["return"]) for entry in history if "return" in entry]
+    eval_points = [(entry["step"], entry["eval_return"]) for entry in history if "eval_return" in entry]
+
+    if not episode_points and not eval_points:
+        print("No return metrics captured; skipping plot generation")
+        return
+
+    plt.figure(figsize=(8, 5))
+    if episode_points:
+        episode_points.sort()
+        steps, returns = zip(*episode_points)
+        steps = np.asarray(steps)
+        returns = np.asarray(returns, dtype=np.float32)
+        if len(returns) >= rolling_window:
+            kernel = np.ones(rolling_window, dtype=np.float32) / rolling_window
+            smoothed = np.convolve(returns, kernel, mode="valid")
+            smoothed_steps = steps[rolling_window - 1 :]
+            plt.plot(steps, returns, label="Episode return", alpha=0.3)
+            plt.plot(smoothed_steps, smoothed, label=f"Episode return (rolling {rolling_window})", alpha=0.9)
+        else:
+            plt.plot(steps, returns, label="Episode return", alpha=0.8)
+    if eval_points:
+        eval_steps, eval_returns = zip(*eval_points)
+        plt.plot(eval_steps, eval_returns, label="Eval return", linestyle="--", alpha=0.8)
+
+    plt.xlabel("Environment step")
+    plt.ylabel("Return")
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(path)
+    print(f"Saved plot to {path}")
 
 
 if __name__ == "__main__":
