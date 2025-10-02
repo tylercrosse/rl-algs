@@ -60,17 +60,25 @@ class DQNAgent(Agent):
         if not {"obs", "action", "reward", "next_obs", "done"}.issubset(transition):
             raise KeyError("Transition must include obs, action, reward, next_obs, and done")
         self.replay_buffer.add(
-            transition["obs"].cpu().numpy(),
-            transition["action"].cpu().numpy(),
+            transition["obs"].squeeze(0).cpu().numpy(),
+            transition["action"].squeeze(0).cpu().numpy(),
             float(transition["reward"].item()),
-            transition["next_obs"].cpu().numpy(),
+            transition["next_obs"].squeeze(0).cpu().numpy(),
             bool(transition["done"].item()),
         )
 
     def update(self, batch: Mapping[str, torch.Tensor]) -> Mapping[str, float]:  # type: ignore[override]
         self._steps += 1
         obs = batch["obs"].to(self.device)
-        actions = batch["action"].long().to(self.device)
+        actions = batch["action"].to(self.device)
+        if actions.dim() > 1:
+            actions = actions.view(actions.shape[0], -1)
+            if actions.shape[-1] != 1:
+                raise ValueError(
+                    f"DQNAgent only supports scalar discrete actions; received shape {tuple(actions.shape)}"
+                )
+            actions = actions.squeeze(-1)
+        actions = actions.long()
         rewards = batch["reward"].to(self.device)
         next_obs = batch["next_obs"].to(self.device)
         dones = batch["done"].to(self.device)

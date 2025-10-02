@@ -7,6 +7,7 @@ from typing import Dict, List, Mapping, Optional
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 from rl_algs.agents.base import Agent
 from rl_algs.training.evaluator import evaluate_agent
@@ -39,7 +40,7 @@ class Trainer:
         obs = np.asarray(obs, dtype=np.float32)
         history: List[Dict[str, float]] = []
 
-        for step in range(1, self.config.total_steps + 1):
+        for step in tqdm(range(1, self.config.total_steps + 1), desc="Training", unit="step"):
             obs_tensor = to_tensor(obs, self.device).unsqueeze(0)
             action_tensor = self.agent.select_action(obs_tensor)
             action_tensor = action_tensor.detach()
@@ -87,5 +88,9 @@ class Trainer:
             if step % self.config.eval_interval == 0:
                 eval_score = evaluate_agent(self.agent, self.eval_env, episodes=self.config.eval_episodes)
                 history.append({"step": float(step), "eval_return": eval_score})
+
+        # Final evaluation
+        final_eval_score = evaluate_agent(self.agent, self.eval_env, episodes=self.config.eval_episodes)
+        history.append({"step": float(self.config.total_steps), "eval_return": final_eval_score})
 
         return history
