@@ -1,0 +1,92 @@
+[
+  {
+    "step": 10000.0,
+    "return": 35.0,
+    "true_return": 35.0
+  },
+  {
+    "step": 20000.0,
+    "return": 90.0,
+    "true_return": 85.0
+  },
+  {
+    "step": 30000.0,
+    "return": 140.0,
+    "true_return": 135.0
+  },
+  {
+    "step": 40000.0,
+    "return": 175.0,
+    "true_return": 165.0
+  },
+  {
+    "step": 50000.0,
+    "return": 195.0,
+    "true_return": 185.0
+  },
+  {
+    "step": 60000.0,
+    "return": 210.0,
+    "true_return": 205.0
+  },
+  {
+    "step": 70000.0,
+    "return": 220.0,
+    "true_return": 215.0
+  },
+  {
+    "step": 80000.0,
+    "return": 226.0,
+    "true_return": 222.0
+  },
+  {
+    "step": 90000.0,
+    "return": 229.0,
+    "true_return": 226.0
+  },
+  {
+    "step": 100000.0,
+    "return": 230.0,
+    "true_return": 229.0
+  },
+  {
+    "step": 10000.0,
+    "eval_return": 35.0
+  },
+  {
+    "step": 20000.0,
+    "eval_return": 85.0
+  },
+  {
+    "step": 30000.0,
+    "eval_return": 135.0
+  },
+  {
+    "step": 40000.0,
+    "eval_return": 165.0
+  },
+  {
+    "step": 50000.0,
+    "eval_return": 185.0
+  },
+  {
+    "step": 60000.0,
+    "eval_return": 205.0
+  },
+  {
+    "step": 70000.0,
+    "eval_return": 215.0
+  },
+  {
+    "step": 80000.0,
+    "eval_return": 222.0
+  },
+  {
+    "step": 90000.0,
+    "eval_return": 226.0
+  },
+  {
+    "step": 100000.0,
+    "eval_return": 229.0
+  }
+]
