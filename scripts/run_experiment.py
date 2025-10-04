@@ -22,6 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train RL agents on a Gymnasium task")
     parser.add_argument("--algo", choices=["dqn", "reinforce", "ppo"], default="dqn", help="Which agent to train")
     parser.add_argument("--env-id", default="CartPole-v1", help="Gymnasium environment ID")
+    parser.add_argument("--eval-env-id", default=None, help="Optional evaluation environment ID")
     parser.add_argument("--total-steps", type=int, default=50_000, help="Number of environment steps to collect")
     parser.add_argument("--device", default="cpu", help="Torch device to use")
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
@@ -80,6 +81,7 @@ def main() -> None:
     agent = algo_builders[args.algo]()
     trainer_config = TrainerConfig(
         env_id=args.env_id,
+        eval_env_id=args.eval_env_id,
         total_steps=args.total_steps,
         eval_interval=args.eval_interval,
         seed=args.seed,
@@ -139,9 +141,10 @@ def _plot_history(history: List[Dict[str, float]], path: str, title: str, rollin
         ) from exc
 
     episode_points = [(entry["step"], entry["return"]) for entry in history if "return" in entry]
+    true_points = [(entry["step"], entry["true_return"]) for entry in history if "true_return" in entry]
     eval_points = [(entry["step"], entry["eval_return"]) for entry in history if "eval_return" in entry]
 
-    if not episode_points and not eval_points:
+    if not episode_points and not eval_points and not true_points:
         print("No return metrics captured; skipping plot generation")
         return
 
@@ -155,10 +158,14 @@ def _plot_history(history: List[Dict[str, float]], path: str, title: str, rollin
             kernel = np.ones(rolling_window, dtype=np.float32) / rolling_window
             smoothed = np.convolve(returns, kernel, mode="valid")
             smoothed_steps = steps[rolling_window - 1 :]
-            plt.plot(steps, returns, label="Episode return", alpha=0.3)
-            plt.plot(smoothed_steps, smoothed, label=f"Episode return (rolling {rolling_window})", alpha=0.9)
+            plt.plot(steps, returns, label="Observed return", alpha=0.3)
+            plt.plot(smoothed_steps, smoothed, label=f"Observed return (rolling {rolling_window})", alpha=0.9)
         else:
-            plt.plot(steps, returns, label="Episode return", alpha=0.8)
+            plt.plot(steps, returns, label="Observed return", alpha=0.8)
+    if true_points:
+        true_points.sort()
+        true_steps, true_returns = zip(*true_points)
+        plt.plot(true_steps, true_returns, label="Ground-truth return", linestyle="-.", alpha=0.8)
     if eval_points:
         eval_steps, eval_returns = zip(*eval_points)
         plt.plot(eval_steps, eval_returns, label="Eval return", linestyle="--", alpha=0.8)

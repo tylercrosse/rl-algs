@@ -1,9 +1,10 @@
 [project]
 name = "rl-algs"
 version = "0.1.0"
-description = "Reference implementations of classic reinforcement learning agents in PyTorch"
+description = "Reward misspecification micro-benchmarks for reinforcement learning safety"
 readme = "README.md"
 authors = [{ name = "Tyler Crosse" }]
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
     "torch>=2.1.0",
@@ -19,6 +20,9 @@ dev = [
     "black>=23.0",
     "uv>=0.1.20",
     "matplotlib>=3.7",
+    "pandas>=2.1",
+    "ipykernel>=6.25",
+    "nbformat>=5.9",
 ]
 
 logging = [

@@ -1,0 +1,4 @@
+scenario,env_id,eval_env_id,final_eval_return,mean_eval_return,mean_observed_return,mean_true_return,history_path
+Baseline reward,LunarLander-v3,LunarLander-v3,240.0,237.66666666666666,237.66666666666666,237.66666666666666,results/baseline_history.json
+Fuel bonus (misspecified),LunarLanderFuelBonus-v0,LunarLander-v3,-85.0,-78.33333333333333,363.3333333333333,-78.33333333333333,results/misspecified_history.json
+Fuel bonus clipped,LunarLanderFuelBonusClipped-v0,LunarLander-v3,229.0,225.66666666666666,228.33333333333334,225.66666666666666,results/mitigated_history.json

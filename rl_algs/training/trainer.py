@@ -23,6 +23,7 @@ class TrainerConfig:
     eval_episodes: int = 5
     max_episode_steps: Optional[int] = None
     seed: int = 0
+    eval_env_id: Optional[str] = None
 
 
 class Trainer:
@@ -37,7 +38,12 @@ class Trainer:
         self.agent = agent
         self.config = config
         self.env = make_env(config.env_id, seed=config.seed, max_episode_steps=config.max_episode_steps)
-        self.eval_env = make_env(config.env_id, seed=config.seed + 1, max_episode_steps=config.max_episode_steps)
+        eval_env_id = config.eval_env_id or config.env_id
+        self.eval_env = make_env(
+            eval_env_id,
+            seed=config.seed + 1,
+            max_episode_steps=config.max_episode_steps,
+        )
         self.device = agent.device
         self._loggers = list(loggers or [])
 
@@ -46,6 +52,8 @@ class Trainer:
         obs = np.asarray(obs, dtype=np.float32)
         history: List[Dict[str, float]] = []
         episode_return = 0.0
+        true_episode_return = 0.0
+        episode_components: Dict[str, float] = {}
         episode_len = 0
 
         for step in tqdm(range(1, self.config.total_steps + 1), desc="Training", unit="step"):
@@ -55,7 +63,7 @@ class Trainer:
             action_np = action_tensor.squeeze(0).cpu().numpy()
             action_value = int(action_np.item()) if action_np.size == 1 else action_np
 
-            next_obs, reward, terminated, truncated, _ = self.env.step(action_value)
+            next_obs, reward, terminated, truncated, info = self.env.step(action_value)
             done = bool(terminated or truncated)
 
             stored_action = action_tensor.view(1, -1).to(device=self.device, dtype=torch.int64)
@@ -80,6 +88,13 @@ class Trainer:
             episode_return += reward
             episode_len += 1
 
+            if "true_reward" in info:
+                true_episode_return += float(info["true_reward"])
+            components = info.get("reward_components", {})
+            if components:
+                for key, value in components.items():
+                    episode_components[key] = episode_components.get(key, 0.0) + float(value)
+
             metrics: Mapping[str, float] = {}
             if hasattr(self.agent, "sample_and_update"):
                 metrics = getattr(self.agent, "sample_and_update")()
@@ -99,17 +114,24 @@ class Trainer:
                         self._emit_metrics(payload)
 
                 if not recorded_metrics or "return" not in recorded_metrics:
-                    payload = {
+                    payload: Dict[str, float] = {
                         "step": float(step),
                         "return": float(episode_return),
                         "episode_len": float(episode_len),
                     }
+                    if true_episode_return:
+                        payload["true_return"] = float(true_episode_return)
+                    if episode_components:
+                        for key, value in episode_components.items():
+                            payload[f"return_{key}"] = float(value)
                     history.append(payload)
                     self._emit_metrics(payload)
 
                 obs, _ = self.env.reset()
                 obs = np.asarray(obs, dtype=np.float32)
                 episode_return = 0.0
+                true_episode_return = 0.0
+                episode_components.clear()
                 episode_len = 0
             else:
                 obs = np.asarray(next_obs, dtype=np.float32)
